@@ -1,0 +1,11 @@
+engine/
+calibration.json
+templates.npz
+__pycache__/
+.venv/
+.coach.lock
+logs/
+games/
+debug_*.png
+.pytest_cache/
+dataset/

@@ -1,0 +1,5 @@
+numpy
+opencv-python
+python-chess
+playwright
+anthropic
