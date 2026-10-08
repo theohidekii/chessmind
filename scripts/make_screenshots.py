@@ -121,6 +121,16 @@ def main():
     # 4) statistics
     sw = gui.StatsWindow(app)
     shot(app, sw, "stats.png", x=300)
+    sw.destroy()
+
+    # 5) installation check, in a "fresh machine" scenario (no Stockfish, no optional data)
+    from chessmind import book, config, installer
+    config.find_stockfish = lambda: (_ for _ in ()).throw(FileNotFoundError())
+    book.ECO_BOOK = tmp / "no-book.bin"
+    installer.SYZYGY_DIR = tmp / "no-tablebases"
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+    setup = gui.SetupWindow(app)
+    shot(app, setup, "setup.png", x=400)
     app.root.destroy()
 
 

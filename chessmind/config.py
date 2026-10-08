@@ -17,6 +17,14 @@ def make_dpi_aware():
             ctypes.windll.user32.SetProcessDPIAware()
 
 
+def console_python():
+    """python.exe ao lado do interpretador atual (o gui.bat usa pythonw.exe, que nao tem console/pipes)."""
+    exe = Path(sys.executable)
+    if exe.name.lower() == "pythonw.exe" and exe.with_name("python.exe").exists():
+        return str(exe.with_name("python.exe"))
+    return str(exe)
+
+
 def find_stockfish():
     env = os.environ.get("STOCKFISH_PATH")
     if env and Path(env).exists():

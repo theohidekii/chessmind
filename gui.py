@@ -12,7 +12,7 @@ from tkinter import messagebox, ttk
 
 import chess
 
-from chessmind import config, explain, lock, log, stats, strength, training
+from chessmind import config, explain, installer, lock, log, setup_check, stats, strength, training
 from chessmind.review import GAMES_DIR, LABELS_PT
 from chessmind.runner import DEFAULT_SETTINGS, PRESETS, Runner
 from chessmind.timing import ev_to_pawns
@@ -481,6 +481,78 @@ class StatsWindow(tk.Toplevel):
         tk.Frame(box, bg=CARD, height=6).pack()
 
 
+class SetupWindow(tk.Toplevel):
+    """Installation check: what is ready, what is missing, and one-click downloads."""
+
+    FIXES = {   # fix key -> (button text, installer call)
+        "stockfish": ("Baixar Stockfish (~80 MB)", lambda prog: installer.download_stockfish(prog)),
+        "eco": ("Baixar livro (~0,4 MB)", lambda prog: installer.get_eco(prog)),
+        "syzygy": ("Baixar tablebases 3-4 pecas (~4,4 MB)", lambda prog: installer.get_syzygy(4, prog)),
+    }
+
+    def __init__(self, app):
+        super().__init__(app.root, bg=BG)
+        self.app = app
+        self.title("Verificar instalacao")
+        self.resizable(False, False)
+        self.busy = False
+        self.body = tk.Frame(self, bg=BG)
+        self.body.pack(padx=16, pady=(14, 6), fill="x")
+        self.status = tk.Label(self, text="", bg=BG, fg=MUTED, font=(FONT, 9), anchor="w")
+        self.status.pack(fill="x", padx=18)
+        self.bar = ttk.Progressbar(self, mode="determinate", maximum=100)
+        self.bar.pack(fill="x", padx=18, pady=(2, 12))
+        self.refresh()
+
+    def refresh(self):
+        for w in self.body.winfo_children():
+            w.destroy()
+        for c in setup_check.run_checks():
+            row = Card(self.body)
+            row.pack(fill="x", pady=3)
+            icon = "\u2713" if c.ok else "\u2717" if c.required else "\u25CB"
+            color = GREEN if c.ok else RED if c.required else FAINT
+            tk.Label(row, text=icon, bg=CARD, fg=color, font=(FONT, 14, "bold"), width=2).pack(side="left", padx=(10, 0))
+            mid = tk.Frame(row, bg=CARD)
+            mid.pack(side="left", fill="x", expand=True, padx=8, pady=7)
+            tk.Label(mid, text=c.label, bg=CARD, fg=FG, font=(FONT, 10, "bold"), anchor="w").pack(fill="x")
+            tk.Label(mid, text=c.detail, bg=CARD, fg=MUTED, font=(FONT, 9), anchor="w", justify="left",
+                     wraplength=330).pack(fill="x")
+            if c.fix:
+                text, _ = self.FIXES[c.fix]
+                b = ttk.Button(row, text=text, style="Ghost.TButton", command=lambda k=c.fix: self.install(k))
+                b.pack(side="right", padx=10)
+                if self.busy:
+                    b.state(["disabled"])
+
+    def install(self, fix):
+        if self.busy:
+            return
+        self.busy = True
+        self.refresh()
+        _, run = self.FIXES[fix]
+
+        def work():
+            try:
+                run(lambda msg, frac=None: self.app.q.put(("setup", msg, frac)))
+                self.app.q.put(("setup_done", None))
+            except Exception as e:
+                L.warning("instalacao falhou: %s", e)
+                self.app.q.put(("setup_done", f"{type(e).__name__}: {e}"))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_progress(self, msg, frac):
+        self.status.configure(text=msg, fg=BLUE)
+        self.bar.configure(mode="determinate", value=(frac or 0) * 100)
+
+    def on_done(self, error):
+        self.busy = False
+        self.bar.configure(value=0 if error else 100)
+        self.status.configure(text=("Falhou: " + error) if error else "Pronto.", fg=RED if error else GREEN)
+        self.refresh()
+
+
 class App:
     def __init__(self):
         self.root = tk.Tk()
@@ -536,6 +608,8 @@ class App:
                selectforeground=[("readonly", FG)])
         st.configure("TSpinbox", fieldbackground="#242830", foreground=FG, arrowcolor=MUTED,
                      bordercolor=BORDER, lightcolor="#242830", darkcolor="#242830", padding=2)
+        st.configure("Horizontal.TProgressbar", troughcolor=CARD, background="#1f9d6b", bordercolor=BORDER,
+                     lightcolor="#1f9d6b", darkcolor="#1f9d6b")
         self.root.option_add("*TCombobox*Listbox.background", "#242830")
         self.root.option_add("*TCombobox*Listbox.foreground", FG)
         self.root.option_add("*TCombobox*Listbox.selectBackground", "#1f9d6b")
@@ -688,6 +762,8 @@ class App:
     def _menu(self):
         m = tk.Menu(self.root, tearoff=0)
         tools = tk.Menu(m, tearoff=0)
+        tools.add_command(label="Verificar instalacao / baixar dados...", command=self.open_setup)
+        tools.add_separator()
         tools.add_command(label="Treino a partir dos erros", command=lambda: TrainerWindow(self))
         tools.add_command(label="Estatisticas", command=lambda: StatsWindow(self))
         tools.add_command(label="Revisao da ultima partida", command=self.open_review)
@@ -699,6 +775,26 @@ class App:
         tools.add_command(label="Abrir pasta de logs", command=lambda: self._open_dir(log.LOG_DIR))
         m.add_cascade(label="Ferramentas", menu=tools)
         self.root.config(menu=m)
+
+    def open_setup(self):
+        if getattr(self, "setup_win", None) and self.setup_win.winfo_exists():
+            self.setup_win.lift()
+            return self.setup_win
+        self.setup_win = SetupWindow(self)
+        return self.setup_win
+
+    def startup_check(self):
+        """On launch: if something REQUIRED is missing, show the installation check (and offer to
+        download Stockfish right away)."""
+        checks = setup_check.run_checks()
+        if setup_check.ready(checks):
+            return
+        win = self.open_setup()
+        if any(c.key == "stockfish" and not c.ok for c in checks) and messagebox.askyesno(
+                "Stockfish nao encontrado",
+                "O ChessMind precisa do Stockfish (o motor de xadrez).\n\nBaixar automaticamente agora "
+                "(~80 MB, do GitHub oficial do Stockfish)?", parent=win):
+            win.install("stockfish")
 
     def reset_strength(self):
         if messagebox.askyesno("Redefinir forca", "Apagar o nivel de forca aprendido contra cada bot? "
@@ -817,8 +913,9 @@ class App:
         self.set_state("wait", "Calibrando...")
 
         def work():
-            p = subprocess.Popen([sys.executable, "calibrate_pw.py"], cwd=str(config.ROOT),
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            p = subprocess.Popen([config.console_python(), "calibrate_pw.py"], cwd=str(config.ROOT),
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                 creationflags=0x08000000 if sys.platform == "win32" else 0)   # sem console
             for line in p.stdout:
                 self.q.put(("log", line))
             p.wait()
@@ -832,6 +929,10 @@ class App:
             self.btn_run.state(["disabled"])
             self.set_state("wait", "Parando...")
             self.root.after(4000, self._force_stop, self.runner)
+            return
+        if not setup_check.ready():
+            self.open_setup()
+            self.set_state("warn", "Falta instalar algo (veja a janela)")
             return
         if not (config.CONFIG_PATH.exists() and config.TEMPLATES_PATH.exists()):
             self.write_log("Calibre primeiro.")
@@ -998,6 +1099,14 @@ class App:
                     self.white_bottom = msg[1]
                     self.draw_board()
                     self.draw_bar(None)
+                elif kind == "setup":
+                    win = getattr(self, "setup_win", None)
+                    if win and win.winfo_exists():
+                        win.on_progress(msg[1], msg[2])
+                elif kind == "setup_done":
+                    win = getattr(self, "setup_win", None)
+                    if win and win.winfo_exists():
+                        win.on_done(msg[1])
                 elif kind == "strength":
                     _, elo, name = msg
                     self.chk_adaptive.configure(
@@ -1073,4 +1182,13 @@ if __name__ == "__main__":
                      "Feche-o antes de abrir este: duas instancias disputam as setas e "
                      "fazem a tela piscar." % lock.owner_pid())
         sys.exit(1)
-    App().run()
+    try:
+        app = App()
+        app.root.after(300, app.startup_check)
+        app.run()
+    except Exception as e:                    # never close silently: show the error and where the log is
+        L.exception("falha ao iniciar a interface")
+        import tkinter.messagebox as mb
+        mb.showerror("ChessMind", f"O ChessMind nao conseguiu iniciar:\n\n{type(e).__name__}: {e}\n\n"
+                                  f"Detalhes em {log.LOG_DIR}")
+        sys.exit(1)

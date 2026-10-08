@@ -15,6 +15,19 @@
 
 ---
 
+## Quick start
+
+```text
+1. Get the code      git clone https://github.com/theohidekii/chessmind.git      (or Code → Download ZIP, then unzip)
+2. Double-click      setup.bat     creates the environment and, if you agree, downloads Stockfish (~80 MB),
+                                   an opening book and endgame tablebases
+3. Double-click      gui.bat       opens ChessMind
+```
+
+You need **Windows 10/11**, **Google Chrome** and **Python 3.11+ with Tk** (installed from [python.org](https://www.python.org/downloads/)).
+Nothing else is installed by hand: `setup.bat` finds Python, builds a private environment, and the app itself checks
+the installation on launch and offers to download anything that is missing. Details in [Getting started](#getting-started).
+
 ## Table of contents
 
 - [Overview](#overview)
@@ -81,7 +94,7 @@ It was built in stages, and each stage is usable on its own:
 ### Engineering
 - One worker thread owns the browser and the engine and talks to the GUI through a thread-safe message queue; arrows are an in-page SVG (no native overlay window, no flicker).
 - A **single-instance lock**, rotating log files, and a watchdog that clears stale arrows if the engine thread stalls.
-- **97 automated tests**, including an end-to-end game simulation against a real headless Chrome and a real Stockfish.
+- **110 automated tests**, including an end-to-end game simulation against a real headless Chrome and a real Stockfish.
 
 ## Screenshots
 
@@ -91,7 +104,8 @@ It was built in stages, and each stage is usable on its own:
     <td align="center"><img src="docs/images/trainer.png" alt="Training mode" width="420"><br><sub><b>Training</b>: your mistakes as exercises (best move in green, yours in red)</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="docs/images/stats.png" alt="Statistics dashboard" width="520"><br><sub><b>Statistics</b>: accuracy trend, results by opponent and by opening</sub></td>
+    <td align="center"><img src="docs/images/stats.png" alt="Statistics dashboard" width="400"><br><sub><b>Statistics</b>: accuracy trend, results by opponent and by opening</sub></td>
+    <td align="center"><img src="docs/images/setup.png" alt="Installation check" width="340"><br><sub><b>Installation check</b>: what is ready, what is missing, one-click downloads</sub></td>
   </tr>
 </table>
 
@@ -170,7 +184,7 @@ Each of your moves is compared with the engine's best line using win probability
 chessmind/
 ├── gui.py                  Tk interface: board, suggestions, settings, review / training / stats windows
 ├── calibrate_pw.py         One-click calibration (learns piece templates for the vision fallback)
-├── setup.bat · gui.bat     Create the virtual environment · launch the app
+├── setup.bat · gui.bat     One-click setup (Python + venv + dependencies + downloads) · launch the app
 ├── chessmind/
 │   ├── pwsource.py         Chrome over CDP: DOM readers, page state, in-page arrows, clicks, safety guard
 │   ├── runner.py           Main loop (thread): ties everything together, talks to the GUI via a queue
@@ -182,15 +196,17 @@ chessmind/
 │   ├── review.py           Move grading, accuracy, game summary, JSON/PGN export, result inference
 │   ├── training.py         Exercises from mistakes + spaced repetition + answer checking
 │   ├── stats.py            Aggregates saved games (trend, by opponent, by opening)
+│   ├── installer.py        Downloads Stockfish, the ECO book and Syzygy tablebases (CLI and GUI share it)
+│   ├── setup_check.py      Installation check: what is ready, what is missing, how to fix it
 │   ├── explain.py          Optional Claude explanations with an on-disk cache
 │   ├── openings.py         Opening names (full ECO table when installed, compact built-in list otherwise)
 │   ├── vision.py           Computer-vision fallback: per-square masks + template matching
 │   ├── collect.py          Opt-in dataset collector (DOM-labelled squares) for a future learned recogniser
 │   └── lock.py · log.py · config.py
 ├── scripts/
-│   ├── get_data.py         Downloads the optional data (ECO table + book, Syzygy tablebases)
+│   ├── get_data.py         Command line for the downloads (Stockfish, ECO book, Syzygy)
 │   └── make_screenshots.py Renders the README screenshots from the real GUI
-├── tests/                  97 tests (see Testing)
+├── tests/                  110 tests (see Testing)
 └── docs/images/            Screenshots
 ```
 
@@ -202,54 +218,86 @@ strength) · `cache/` (explanations) · `dataset/` (collected squares) · `engin
 ### Requirements
 
 - **Windows 10/11.** The app uses Windows-specific APIs (process priority flags, `msvcrt` file locking, DPI awareness, capture exclusion).
-- **Google Chrome** (the app launches it with a dedicated profile and a debugging port; no browser download is needed).
-- **Python 3.13** with Tk (included in the standard Windows installer). It is the version the project is developed and tested on; other recent 3.x releases are likely to work but are untested.
-- A **Stockfish** binary (GPL-3.0), see below.
+- **Google Chrome.** The app launches it with a dedicated profile and a debugging port; no browser download is needed.
+- **Python 3.11+ with Tk** from [python.org](https://www.python.org/downloads/) (keep *tcl/tk and IDLE* ticked and tick *Add python.exe to PATH*). The project is developed on Python 3.13 and its test suite also passes on 3.14; 3.11 and 3.12 are accepted by `setup.bat` but untested.
+- The **Stockfish** engine (GPL-3.0). `setup.bat` and the app can download it for you; it is not bundled.
 
-### Install
+### Install (two clicks)
 
-```powershell
-git clone https://github.com/theohidekii/chessmind.git
-cd chessmind
-setup.bat
-```
+1. **Get the code**, either with git or with *Code → Download ZIP* on GitHub (then unzip):
 
-`setup.bat` creates `.venv` and installs `requirements.txt`. Manual equivalent:
+   ```powershell
+   git clone https://github.com/theohidekii/chessmind.git
+   cd chessmind
+   ```
+
+2. **Run `setup.bat`.** It will:
+   - find a suitable Python (3.13 first, then 3.14, 3.12, 3.11) and check that Tk is available,
+   - create a private virtual environment in `.venv` and install `requirements.txt`,
+   - ask whether to download **Stockfish** (the latest official Windows build, ~80 MB), the **opening book** (~0.4 MB) and **3-4 piece tablebases** (~4.4 MB).
+
+   | Command | Behaviour |
+   |---|---|
+   | `setup.bat` | Asks before downloading |
+   | `setup.bat --yes` | Downloads everything without asking |
+   | `setup.bat --no-data` | Only builds the environment; get the rest later from inside the app |
+
+3. **Run `gui.bat`** (no console window; startup errors appear in a dialog and in `logs\chessmind.log`). If the environment does not exist yet, it runs `setup.bat` for you.
+
+### Installation check inside the app
+
+On every launch ChessMind checks that **Chrome** and **Stockfish** are present. If Stockfish is missing, it offers to download it
+right away. At any time, open **Ferramentas → Verificar instalacao / baixar dados…** to see what is ready and fix it with one click:
+
+| Item | Required | One-click download |
+|---|---|---|
+| Google Chrome | yes | no (install it yourself) |
+| Stockfish | yes | yes, ~80 MB, from the official Stockfish GitHub releases |
+| Opening book (Lichess ECO) | no | yes, ~0.4 MB |
+| Syzygy tablebases (3-4 pieces) | no | yes, ~4.4 MB |
+| Calibration | for running | done from the main window |
+| Claude explanations | no | set `ANTHROPIC_API_KEY` |
+
+### Manual alternatives
+
+<details>
+<summary>Install by hand, bring your own Stockfish, or use the command line</summary>
 
 ```powershell
 py -3.13 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python gui.py
 ```
 
 > Playwright is used only to *connect* to your installed Chrome, so `playwright install` is **not** required.
 
-### Get Stockfish
+**Your own Stockfish.** Put any Stockfish executable at `engine\stockfish.exe` (or `engine\stockfish*\stockfish*.exe`, in a
+folder whose name starts with `stockfish`), or point the `STOCKFISH_PATH` environment variable at it.
 
-Download a Windows build from [stockfishchess.org](https://stockfishchess.org/download/) (the `x86-64-universal`
-or `avx2` build is fine) and place the executable in `engine/`. It is found automatically at either:
-
-- `engine\stockfish.exe`, or `engine\stockfish*\stockfish*.exe` (a folder whose name starts with `stockfish`)
-- or wherever the `STOCKFISH_PATH` environment variable points
-
-### Optional data
+**Command-line downloads** (the same code the app uses):
 
 ```powershell
-.venv\Scripts\python scripts\get_data.py --eco          # ECO opening table + opening book (~395 KB)
-.venv\Scripts\python scripts\get_data.py --syzygy 4     # 3-4 piece tablebases (~4.4 MB)
-.venv\Scripts\python scripts\get_data.py --syzygy 5     # 3-5 piece tablebases (~984 MB, 290 files)
+.venv\Scripts\python scripts\get_data.py --all          # Stockfish + opening book + 3-4 piece tablebases
+.venv\Scripts\python scripts\get_data.py --stockfish     # official Stockfish build (~80 MB)
+.venv\Scripts\python scripts\get_data.py --eco           # ECO table + opening book (~0.4 MB)
+.venv\Scripts\python scripts\get_data.py --syzygy 4      # 3-4 piece tablebases (~4.4 MB)
+.venv\Scripts\python scripts\get_data.py --syzygy 5      # 3-5 piece tablebases (~984 MB, 290 files)
 ```
 
-Without these, ChessMind still works: the book is skipped, openings use a compact built-in list, and
+Files that are already complete are skipped; `--all` does not re-download a Stockfish you already have.
+
+</details>
+
+Without the optional data, ChessMind still works: the book is skipped, openings use a compact built-in list, and
 endgames are played by the engine's own search.
 
 ### Run
 
-```powershell
-gui.bat
-```
+Double-click **`gui.bat`** (or run `.venv\Scripts\python gui.py`).
 
 ## Using ChessMind
 
+0. **First launch.** If something required is missing (Chrome or Stockfish), an installation window opens and offers the download.
 1. **Open Chrome.** Click **Abrir Chrome**. It opens a dedicated Chrome (separate profile, remote-debugging port 9222). You can play as a guest, or log in inside that profile.
 2. **Start a game** at the starting position (for example against a computer opponent on chess.com).
 3. **Calibrate.** Click **Calibrar** once. The board and your colour are read from the page; the piece templates (used only by the vision fallback) are learned from the starting position. It should report 32 pieces.
@@ -270,7 +318,7 @@ gui.bat
 | Ritmo humano | Position- and clock-aware move delays |
 | Força adaptativa | Adaptive strength; shows the current level per opponent |
 | Iniciar a próxima partida sozinho | Click "New game"/"Rematch" at game end (max 10 in a row) |
-| **Ferramentas** menu | Training, statistics, last review, open folders, reset learned strength, collect vision data |
+| **Ferramentas** menu | Installation check and downloads, training, statistics, last review, open folders, reset learned strength, collect vision data |
 | Explicar jogada | Natural-language explanation (needs an API key, see [Configuration](#configuration)) |
 
 ## Autopilot and adaptive strength
@@ -301,6 +349,7 @@ The level never decreases on its own (reset it from the menu). It is stored per 
 ## Safety, fair play and responsible use
 
 - **Use ChessMind against computer opponents and for analysis only.** Using an engine during games against people breaks the fair-play rules of chess.com and Lichess and can get accounts banned.
+- **Read the Terms of Service.** chess.com's [Fair Play Policy](https://www.chess.com/legal/fair-play) covers games against other people and states that it does not apply to games against its computer bots. Its [User Agreement](https://www.chess.com/legal/user-agreement) (section 4) is a separate matter: it prohibits automation software and automated access, and lets chess.com suspend or terminate accounts with or without cause and without a right of appeal. ChessMind reads the page automatically and, in autopilot, clicks it automatically, so using it on chess.com may breach those terms **even against bots**. This is a risk disclosure, not legal advice, and nothing in the project is designed to hide automation. If that matters to you, ask chess.com support, use a guest session or an account you can afford to lose, or prefer a platform with an official bot API (see the roadmap).
 - Autopilot is hard-guarded to computer-opponent pages (see above). The guard is code, not a warning.
 - Autopilot disables itself if a move cannot be confirmed on the board, and **Parar** or closing the window stops it immediately.
 - **Single instance.** Two copies would fight over the page; the second one refuses to start.
@@ -333,7 +382,7 @@ setx ANTHROPIC_API_KEY "your-key"
 .venv\Scripts\python -m pytest tests -q
 ```
 
-The suite has **97 tests** (96 run without Syzygy tables). Tests that need Stockfish, Chrome or Syzygy tables skip themselves when those are absent.
+The suite has **110 tests**. Tests that need Stockfish, Chrome or Syzygy tables skip themselves when those are absent: with Stockfish installed 109 run (the Syzygy one needs the tables); on a fresh machine without Stockfish the engine and end-to-end tests are skipped and the rest (92) still run.
 
 | Area | What is covered |
 |---|---|
@@ -343,6 +392,7 @@ The suite has **97 tests** (96 run without Syzygy tables). Tests that need Stock
 | Book and tablebases | Polyglot round-trip, castling encoding, weighted choice, ply limit, engine veto of bad book moves, optimal KQvK conversion |
 | Learning | Grading thresholds, review/PGN export, spaced repetition, answer checking, statistics, explanation cache |
 | Strength | Start level, increments, per-opponent state, persistence, mid-game bumps |
+| Installer | Stockfish asset selection and extraction, engine validation, ECO and tablebase downloads, installation check (all with a simulated network, nothing is downloaded) |
 | End-to-end | A full simulated game against a **real headless Chrome and a real Stockfish**: mid-game join, suggestions, arrows, grading, game over, saved review, adaptive strength update |
 
 > The browser tests run against **simulated chess.com/Lichess pages** built from the sites' known structure; they verify the parsing logic, not the live sites.
@@ -373,13 +423,16 @@ The suite has **97 tests** (96 run without Syzygy tables). Tests that need Stock
 - Lichess "play vs computer" as a second, stable autopilot target.
 - Learned piece recogniser from the opt-in dataset, for any site or theme.
 - Linux and macOS support (replace the Windows-specific APIs).
-- Packaging (installer / single executable).
+- Packaging (single executable / installer).
 
 ## Troubleshooting
 
 | Symptom | Likely cause and fix |
 |---|---|
-| `Stockfish binary not found` | Put the executable in `engine/` or set `STOCKFISH_PATH`. |
+| `setup.bat`: "Python 3.11 or newer with Tk was not found" | Install Python from python.org with *tcl/tk and IDLE* ticked and *Add python.exe to PATH*, then run `setup.bat` again. |
+| `setup.bat` fails while installing | Check your internet connection and run it again; it resumes where it stopped. |
+| Stockfish not found | Open **Ferramentas → Verificar instalacao** and click the download button, or put the executable in `engine/`, or set `STOCKFISH_PATH`. |
+| Window does not open after `gui.bat` | Look at `logs\chessmind.log`; startup errors are also shown in a dialog. |
 | "Nenhum tabuleiro na página" | The Chrome tab is not on a game board, or you are not using the Chrome opened by **Abrir Chrome**. |
 | Calibration reads ≠ 32 pieces | The game is not at the starting position. Start a new game and calibrate again. |
 | Autopilot says it only works against bots | The page failed the computer-opponent guard (see [Autopilot](#autopilot-and-adaptive-strength)). |
