@@ -8,6 +8,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)
 ![Engine](https://img.shields.io/badge/engine-Stockfish%2019-1f9d6b)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
+[![Tests](https://github.com/theohidekii/chessmind/actions/workflows/tests.yml/badge.svg)](https://github.com/theohidekii/chessmind/actions/workflows/tests.yml)
 
 <img src="docs/images/main.png" alt="ChessMind main window: live board, ranked move suggestions, adaptive strength" width="760">
 
@@ -382,7 +383,7 @@ setx ANTHROPIC_API_KEY "your-key"
 .venv\Scripts\python -m pytest tests -q
 ```
 
-The suite has **110 tests**. Tests that need Stockfish, Chrome or Syzygy tables skip themselves when those are absent: with Stockfish installed 109 run (the Syzygy one needs the tables); on a fresh machine without Stockfish the engine and end-to-end tests are skipped and the rest (92) still run.
+The suite has **110 tests**. Tests that need Stockfish, Chrome or Syzygy tables skip themselves when those are absent: with Stockfish installed 109 run (the Syzygy one needs the tables); on a fresh machine without Stockfish the engine and end-to-end tests are skipped and the rest (92) still run. CI runs the suite on Linux on every push and pull request; Windows-only and engine tests skip there.
 
 | Area | What is covered |
 |---|---|
